@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>受付システム</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 16px;
+      background: #f5f5f5;
+    }
+    h1 {
+      font-size: 18px;
+      text-align: center;
+    }
+    .menu-button {
+      display: block;
+      width: 100%;
+      padding: 20px;
+      margin: 12px 0;
+      font-size: 18px;
+      border: none;
+      border-radius: 12px;
+      color: white;
+      background: #4285f4;
+      text-align: center;
+      box-sizing: border-box;
+      cursor: pointer;
+    }
+    #reader {
+      width: 100%;
+      margin-top: 16px;
+    }
+    #result {
+      margin-top: 16px;
+      padding: 20px;
+      border-radius: 12px;
+      text-align: center;
+      font-size: 20px;
+      font-weight: bold;
+      display: none;
+    }
+    .ok    { background: #d4edda; color: #155724; }
+    .used  { background: #f8d7da; color: #721c24; }
+    .wrong { background: #fff3cd; color: #856404; }
+    .back-button {
+      display: block;
+      width: 100%;
+      padding: 14px;
+      margin-top: 12px;
+      font-size: 16px;
+      border: none;
+      border-radius: 8px;
+      background: #999;
+      color: white;
+    }
+  </style>
+</head>
+<body>
+
+  <h1>受付システム</h1>
+
+  <!-- ■要設定：Apps ScriptのURLをここに貼る -->
+  <script>
+    const GAS_URL = "https://script.google.com/macros/s/AKfycbxGUOuQSRSxoEo3aPM6haC114cW0h6k_By6CwvcHu9ZGsjKCP7dn8bCClu-Kmo1RDwDDg/exec";
+  </script>
+
+  <div id="menu">
+    <button class="menu-button" onclick="startScan()">📷 QRを読む</button>
+    <button class="menu-button" style="background:#999" onclick="alert('この機能は次の回で作ります')">🔍 名前で探す</button>
+    <button class="menu-button" style="background:#999" onclick="alert('この機能は次の回で作ります')">🎫 当日券を発行</button>
+  </div>
+
+  <div id="scan-area" style="display:none;">
+    <div id="reader"></div>
+    <button class="back-button" onclick="stopScan()">メニューに戻る</button>
+  </div>
+
+  <div id="result"></div>
+
+  <script src="https://unpkg.com/html5-qrcode"></script>
+  <script>
+    let html5QrCode;
+
+    function startScan() {
+      document.getElementById('menu').style.display = 'none';
+      document.getElementById('scan-area').style.display = 'block';
+      document.getElementById('result').style.display = 'none';
+
+      html5QrCode = new Html5Qrcode("reader");
+      html5QrCode.start(
+        { facingMode: "environment" },
+        { fps: 10, qrbox: 250 },
+        onScanSuccess
+      ).catch(function (err) {
+        showError('カメラが起動できませんでした：' + err);
+      });
+    }
+
+    function stopScan() {
+      if (html5QrCode) {
+        html5QrCode.stop().catch(() => {});
+      }
+      document.getElementById('scan-area').style.display = 'none';
+      document.getElementById('result').style.display = 'none';
+      document.getElementById('menu').style.display = 'block';
+    }
+
+    function onScanSuccess(receptionId) {
+      html5QrCode.stop().catch(() => {});
+      document.getElementById('scan-area').style.display = 'none';
+
+      fetch(GAS_URL + "?id=" + encodeURIComponent(receptionId))
+        .then(function (res) { return res.json(); })
+        .then(showResult)
+        .catch(function (err) {
+          showError('台帳との通信に失敗しました：' + err);
+        });
+    }
+
+    function showResult(res) {
+      const box = document.getElementById('result');
+      box.style.display = 'block';
+      box.className = res.status; // ok / used / wrong
+
+      if (res.status === 'ok') {
+        box.innerHTML = res.name + " 様　" + res.count + "名<br>ご入場ください";
+      } else if (res.status === 'used') {
+        box.innerHTML = "すでに受付済みです<br>(" + res.time + ")";
+      } else {
+        box.innerHTML = "見つかりません<br>名前で探すをお試しください";
+      }
+      box.innerHTML += '<br><br><button class="back-button" onclick="stopScan()">メニューに戻る</button>';
+    }
+
+    function showError(message) {
+      const box = document.getElementById('result');
+      box.style.display = 'block';
+      box.className = 'wrong';
+      box.innerHTML = message + '<br><br><button class="back-button" onclick="stopScan()">メニューに戻る</button>';
+    }
+  </script>
+
+</body>
+</html>
