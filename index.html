@@ -29,6 +29,9 @@
       box-sizing: border-box;
       cursor: pointer;
     }
+    .menu-button:disabled {
+      background: #ccc;
+    }
     #reader {
       width: 100%;
       margin-top: 16px;
@@ -77,6 +80,10 @@
       display: flex;
       justify-content: space-between;
       align-items: center;
+    }
+    .search-item.cancelled {
+      background: #f0f0f0;
+      color: #999;
     }
     .search-item button {
       padding: 10px 16px;
@@ -144,7 +151,7 @@
       <option value="4">4名</option>
       <option value="5">5名</option>
     </select>
-    <button class="menu-button" onclick="doWalkin()">この内容で受付する</button>
+    <button class="menu-button" id="walkin-submit" onclick="doWalkin()">この内容で受付する</button>
     <button class="back-button" onclick="backToMenu()">メニューに戻る</button>
   </div>
 
@@ -222,15 +229,26 @@
 
           data.results.forEach(function (item) {
             const div = document.createElement('div');
-            div.className = 'search-item';
+            const isDone      = item.status === '受付済';
+            const isCancelled = item.status === '取消';
 
-            const isDone = item.status === '受付済';
+            div.className = 'search-item' + (isCancelled ? ' cancelled' : '');
+
+            let label = '';
+            let buttonHtml = '';
+
+            if (isCancelled) {
+              label = '　取消済み';
+              buttonHtml = '<button class="done" disabled>入場不可</button>';
+            } else if (isDone) {
+              label = '　受付済';
+              buttonHtml = '<button class="done" disabled>済</button>';
+            } else {
+              buttonHtml = '<button onclick="checkInById(\'' + item.id + '\')">受付する</button>';
+            }
+
             div.innerHTML =
-              '<span>' + item.name + '（' + item.count + '名）' +
-              (isDone ? '　受付済' : '') + '</span>' +
-              '<button class="' + (isDone ? 'done' : '') + '" ' +
-              (isDone ? 'disabled' : 'onclick="checkInById(\'' + item.id + '\')"') + '>' +
-              (isDone ? '済' : '受付する') + '</button>';
+              '<span>' + item.name + '（' + item.count + '名）' + label + '</span>' + buttonHtml;
             box.appendChild(div);
           });
         });
@@ -250,6 +268,8 @@
       hideAll();
       document.getElementById('walkin-box').style.display = 'block';
       document.getElementById('walkin-name').value = '';
+      document.getElementById('walkin-submit').disabled = false;
+      document.getElementById('walkin-submit').textContent = 'この内容で受付する';
     }
 
     function doWalkin() {
@@ -259,6 +279,11 @@
         alert('氏名を入力してください');
         return;
       }
+
+      // 連打による二重発行を防ぐため、押した瞬間にボタンを無効化する
+      const btn = document.getElementById('walkin-submit');
+      btn.disabled = true;
+      btn.textContent = '処理中...';
 
       fetch(GAS_URL + "?action=walkin&name=" + encodeURIComponent(name) + "&count=" + count)
         .then(function (res) { return res.json(); })
@@ -273,13 +298,18 @@
       hideAll();
       const box = document.getElementById('result');
       box.style.display = 'block';
-      box.className = res.status === 'ok' ? 'ok' : (res.status === 'used' ? 'used' : 'wrong');
 
       if (res.status === 'ok') {
+        box.className = 'ok';
         box.innerHTML = res.name + " 様　" + res.count + "名<br>ご入場ください";
       } else if (res.status === 'used') {
+        box.className = 'used';
         box.innerHTML = "すでに受付済みです<br>(" + res.time + ")";
+      } else if (res.status === 'cancelled') {
+        box.className = 'used';
+        box.innerHTML = "このご予約は取消されています<br>受付スタッフにご相談ください";
       } else {
+        box.className = 'wrong';
         box.innerHTML = "見つかりません<br>名前で探すをお試しください";
       }
       box.innerHTML += '<br><br><button class="back-button" onclick="backToMenu()">メニューに戻る</button>';
