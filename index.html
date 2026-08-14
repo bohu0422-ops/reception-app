@@ -56,26 +56,96 @@
       background: #999;
       color: white;
     }
+    .search-box {
+      display: none;
+      margin-top: 16px;
+    }
+    .search-box input {
+      width: 100%;
+      padding: 14px;
+      font-size: 18px;
+      box-sizing: border-box;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
+    .search-item {
+      background: white;
+      border-radius: 8px;
+      padding: 14px;
+      margin-top: 8px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .search-item button {
+      padding: 10px 16px;
+      border: none;
+      border-radius: 6px;
+      background: #4285f4;
+      color: white;
+      font-size: 15px;
+    }
+    .search-item .done {
+      background: #999;
+    }
+    .walkin-box {
+      display: none;
+      margin-top: 16px;
+    }
+    .walkin-box input, .walkin-box select {
+      width: 100%;
+      padding: 14px;
+      font-size: 18px;
+      box-sizing: border-box;
+      border: 2px solid #ccc;
+      border-radius: 8px;
+      margin-bottom: 8px;
+    }
   </style>
 </head>
 <body>
 
   <h1>受付システム</h1>
 
-  <!-- ■要設定：Apps ScriptのURLをここに貼る -->
+  <!-- ■要設定：Apps ScriptのURL -->
   <script>
     const GAS_URL = "https://script.google.com/macros/s/AKfycbxGUOuQSRSxoEo3aPM6haC114cW0h6k_By6CwvcHu9ZGsjKCP7dn8bCClu-Kmo1RDwDDg/exec";
   </script>
 
+  <!-- メインメニュー -->
   <div id="menu">
     <button class="menu-button" onclick="startScan()">📷 QRを読む</button>
-    <button class="menu-button" style="background:#999" onclick="alert('この機能は次の回で作ります')">🔍 名前で探す</button>
-    <button class="menu-button" style="background:#999" onclick="alert('この機能は次の回で作ります')">🎫 当日券を発行</button>
+    <button class="menu-button" onclick="openSearch()">🔍 名前で探す</button>
+    <button class="menu-button" onclick="openWalkin()">🎫 当日券を発行</button>
   </div>
 
+  <!-- QR読み取り画面 -->
   <div id="scan-area" style="display:none;">
     <div id="reader"></div>
-    <button class="back-button" onclick="stopScan()">メニューに戻る</button>
+    <button class="back-button" onclick="backToMenu()">メニューに戻る</button>
+  </div>
+
+  <!-- 名前検索画面 -->
+  <div class="search-box" id="search-box">
+    <input type="text" id="search-input" placeholder="氏名の一部を入力">
+    <button class="menu-button" onclick="doSearch()">検索する</button>
+    <div id="search-results"></div>
+    <button class="back-button" onclick="backToMenu()">メニューに戻る</button>
+  </div>
+
+  <!-- 当日券発行画面 -->
+  <div class="walkin-box" id="walkin-box">
+    <input type="text" id="walkin-name" placeholder="氏名">
+    <select id="walkin-count">
+      <option value="1">1名</option>
+      <option value="2">2名</option>
+      <option value="3">3名</option>
+      <option value="4">4名</option>
+      <option value="5">5名</option>
+    </select>
+    <button class="menu-button" onclick="doWalkin()">この内容で受付する</button>
+    <button class="back-button" onclick="backToMenu()">メニューに戻る</button>
   </div>
 
   <div id="result"></div>
@@ -84,10 +154,26 @@
   <script>
     let html5QrCode;
 
-    function startScan() {
+    function hideAll() {
       document.getElementById('menu').style.display = 'none';
-      document.getElementById('scan-area').style.display = 'block';
+      document.getElementById('scan-area').style.display = 'none';
+      document.getElementById('search-box').style.display = 'none';
+      document.getElementById('walkin-box').style.display = 'none';
       document.getElementById('result').style.display = 'none';
+    }
+
+    function backToMenu() {
+      if (html5QrCode) {
+        html5QrCode.stop().catch(() => {});
+      }
+      hideAll();
+      document.getElementById('menu').style.display = 'block';
+    }
+
+    // ---- QR読み取り ----
+    function startScan() {
+      hideAll();
+      document.getElementById('scan-area').style.display = 'block';
 
       html5QrCode = new Html5Qrcode("reader");
       html5QrCode.start(
@@ -99,18 +185,9 @@
       });
     }
 
-    function stopScan() {
-      if (html5QrCode) {
-        html5QrCode.stop().catch(() => {});
-      }
-      document.getElementById('scan-area').style.display = 'none';
-      document.getElementById('result').style.display = 'none';
-      document.getElementById('menu').style.display = 'block';
-    }
-
     function onScanSuccess(receptionId) {
       html5QrCode.stop().catch(() => {});
-      document.getElementById('scan-area').style.display = 'none';
+      hideAll();
 
       fetch(GAS_URL + "?id=" + encodeURIComponent(receptionId))
         .then(function (res) { return res.json(); })
@@ -120,10 +197,83 @@
         });
     }
 
+    // ---- 名前で探す ----
+    function openSearch() {
+      hideAll();
+      document.getElementById('search-box').style.display = 'block';
+      document.getElementById('search-input').value = '';
+      document.getElementById('search-results').innerHTML = '';
+    }
+
+    function doSearch() {
+      const q = document.getElementById('search-input').value;
+      if (!q) return;
+
+      fetch(GAS_URL + "?action=search&q=" + encodeURIComponent(q))
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          const box = document.getElementById('search-results');
+          box.innerHTML = '';
+
+          if (!data.results || data.results.length === 0) {
+            box.innerHTML = '<p>見つかりませんでした</p>';
+            return;
+          }
+
+          data.results.forEach(function (item) {
+            const div = document.createElement('div');
+            div.className = 'search-item';
+
+            const isDone = item.status === '受付済';
+            div.innerHTML =
+              '<span>' + item.name + '（' + item.count + '名）' +
+              (isDone ? '　受付済' : '') + '</span>' +
+              '<button class="' + (isDone ? 'done' : '') + '" ' +
+              (isDone ? 'disabled' : 'onclick="checkInById(\'' + item.id + '\')"') + '>' +
+              (isDone ? '済' : '受付する') + '</button>';
+            box.appendChild(div);
+          });
+        });
+    }
+
+    function checkInById(id) {
+      fetch(GAS_URL + "?id=" + encodeURIComponent(id))
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          hideAll();
+          showResult(data);
+        });
+    }
+
+    // ---- 当日券発行 ----
+    function openWalkin() {
+      hideAll();
+      document.getElementById('walkin-box').style.display = 'block';
+      document.getElementById('walkin-name').value = '';
+    }
+
+    function doWalkin() {
+      const name = document.getElementById('walkin-name').value;
+      const count = document.getElementById('walkin-count').value;
+      if (!name) {
+        alert('氏名を入力してください');
+        return;
+      }
+
+      fetch(GAS_URL + "?action=walkin&name=" + encodeURIComponent(name) + "&count=" + count)
+        .then(function (res) { return res.json(); })
+        .then(function (data) {
+          hideAll();
+          showResult(data);
+        });
+    }
+
+    // ---- 結果表示 ----
     function showResult(res) {
+      hideAll();
       const box = document.getElementById('result');
       box.style.display = 'block';
-      box.className = res.status; // ok / used / wrong
+      box.className = res.status === 'ok' ? 'ok' : (res.status === 'used' ? 'used' : 'wrong');
 
       if (res.status === 'ok') {
         box.innerHTML = res.name + " 様　" + res.count + "名<br>ご入場ください";
@@ -132,14 +282,15 @@
       } else {
         box.innerHTML = "見つかりません<br>名前で探すをお試しください";
       }
-      box.innerHTML += '<br><br><button class="back-button" onclick="stopScan()">メニューに戻る</button>';
+      box.innerHTML += '<br><br><button class="back-button" onclick="backToMenu()">メニューに戻る</button>';
     }
 
     function showError(message) {
+      hideAll();
       const box = document.getElementById('result');
       box.style.display = 'block';
       box.className = 'wrong';
-      box.innerHTML = message + '<br><br><button class="back-button" onclick="stopScan()">メニューに戻る</button>';
+      box.innerHTML = message + '<br><br><button class="back-button" onclick="backToMenu()">メニューに戻る</button>';
     }
   </script>
 
